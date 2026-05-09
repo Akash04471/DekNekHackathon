@@ -1,0 +1,162 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+@import "tailwindcss";
+
+/* ─── Design tokens ──────────────────────────────────────────────────── */
+:root {
+  --bg-deep:       #050810;
+  --bg-dark:       #0A0E1A;
+  --bg-card:       rgba(15, 20, 40, 0.75);
+  --bg-panel:      rgba(10, 14, 26, 0.9);
+  --border-glow:   rgba(0, 245, 255, 0.15);
+  --border-subtle: rgba(255,255,255,0.06);
+
+  --cyan:    #00F5FF;
+  --cyan-dim: #00b8c4;
+  --green:   #00FF88;
+  --red:     #FF4444;
+  --amber:   #FFB800;
+  --purple:  #A855F7;
+  --blue:    #3B82F6;
+
+  --text-primary:   #E8F4FF;
+  --text-secondary: #8BA3BF;
+  --text-muted:     #4A6080;
+
+  --font-sans: 'Outfit', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+/* ─── Reset & base ───────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Scrollbars ─────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0,245,255,0.2); border-radius: 2px; }
+
+/* ─── Glass card ─────────────────────────────────────────────────────── */
+.glass {
+  background: var(--bg-card);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+}
+.glass-bright {
+  background: rgba(0, 245, 255, 0.04);
+  border: 1px solid var(--border-glow);
+}
+
+/* ─── Glow utilities ─────────────────────────────────────────────────── */
+.glow-cyan  { box-shadow: 0 0 20px rgba(0,245,255,0.25), 0 0 60px rgba(0,245,255,0.08); }
+.glow-green { box-shadow: 0 0 20px rgba(0,255,136,0.25), 0 0 60px rgba(0,255,136,0.08); }
+.glow-red   { box-shadow: 0 0 20px rgba(255,68,68,0.30),  0 0 60px rgba(255,68,68,0.10); }
+.glow-amber { box-shadow: 0 0 20px rgba(255,184,0,0.25),  0 0 60px rgba(255,184,0,0.08); }
+
+/* ─── Text utilities ─────────────────────────────────────────────────── */
+.text-cyan   { color: var(--cyan); }
+.text-green  { color: var(--green); }
+.text-red    { color: var(--red); }
+.text-amber  { color: var(--amber); }
+.text-muted  { color: var(--text-muted); }
+.text-secondary { color: var(--text-secondary); }
+
+.font-mono { font-family: var(--font-mono); }
+
+/* ─── Neon border ────────────────────────────────────────────────────── */
+.border-cyan  { border-color: rgba(0,245,255,0.35) !important; }
+.border-green { border-color: rgba(0,255,136,0.35) !important; }
+.border-red   { border-color: rgba(255,68,68,0.35)  !important; }
+.border-amber { border-color: rgba(255,184,0,0.35)  !important; }
+
+/* ─── Animations ─────────────────────────────────────────────────────── */
+@keyframes pulse-ring {
+  0%   { transform: scale(0.8); opacity: 0.9; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+@keyframes blink-red {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+@keyframes scan-line {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+@keyframes float-up {
+  0%   { transform: translateY(20px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+@keyframes number-tick {
+  0%   { transform: translateY(100%); }
+  100% { transform: translateY(0); }
+}
+
+.animate-pulse-ring  { animation: pulse-ring 1.5s ease-out infinite; }
+.animate-blink-red   { animation: blink-red 1s ease-in-out infinite; }
+.animate-float-up    { animation: float-up 0.4s ease-out both; }
+
+/* ─── Signal light colors ────────────────────────────────────────────── */
+.signal-green  { color: var(--green); background: rgba(0,255,136,0.12); border-color: rgba(0,255,136,0.4); }
+.signal-yellow { color: var(--amber); background: rgba(255,184,0,0.12); border-color: rgba(255,184,0,0.4); }
+.signal-red    { color: var(--red);   background: rgba(255,68,68,0.12);  border-color: rgba(255,68,68,0.4); }
+
+/* ─── Layout ─────────────────────────────────────────────────────────── */
+.app-layout {
+  display: grid;
+  grid-template-rows: 56px 1fr;
+  grid-template-columns: 260px 1fr 280px;
+  grid-template-areas:
+    "header header header"
+    "left   center right";
+  width: 100vw;
+  height: 100vh;
+  gap: 8px;
+  padding: 8px;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(0,245,255,0.06) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 40% at 90% 110%, rgba(168,85,247,0.05) 0%, transparent 60%),
+    var(--bg-deep);
+}
+
+.app-header { grid-area: header; }
+.app-left   { grid-area: left;   overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.app-center { grid-area: center; position: relative; border-radius: 16px; overflow: hidden; }
+.app-right  { grid-area: right;  overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+
+/* ─── Panel header ───────────────────────────────────────────────────── */
+.panel-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px 6px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.panel-header .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 6px var(--cyan);
+}
+
+/* ─── Gauge arc ──────────────────────────────────────────────────────── */
+.gauge-track { fill: none; stroke: rgba(255,255,255,0.06); }
+.gauge-fill  { fill: none; stroke-linecap: round; transition: stroke-dashoffset 0.8s ease; }
+
+/* ─── DB Meter ───────────────────────────────────────────────────────── */
+.db-bar {
+  transition: height 0.3s ease;
+  border-radius: 2px 2px 0 0;
+}
