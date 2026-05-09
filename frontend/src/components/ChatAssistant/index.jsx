@@ -1,6 +1,30 @@
 import React, { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useJunctionStore } from '../../store/junctionStore'
+
+function Typewriter({ text, speed = 15 }) {
+  const [charIndex, setCharIndex] = useState(0)
+  const indexRef = useRef(0)
+
+  useEffect(() => {
+    indexRef.current = 0
+    setCharIndex(0)
+    if (!text) return
+    const timer = setInterval(() => {
+      indexRef.current += 1
+      if (indexRef.current >= text.length) {
+        setCharIndex(text.length)
+        clearInterval(timer)
+      } else {
+        setCharIndex(indexRef.current)
+      }
+    }, speed)
+    return () => clearInterval(timer)
+  }, [text, speed])
+
+  return <span>{text.slice(0, charIndex)}</span>
+}
 
 export default function ChatAssistant() {
   const { chatOpen, chatMessages, toggleChat, addChatMessage } = useJunctionStore()
@@ -9,8 +33,8 @@ export default function ChatAssistant() {
   const bottomRef = useRef(null)
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [chatMessages])
+    if (chatOpen) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [chatMessages, chatOpen])
 
   const send = async () => {
     const msg = input.trim()
@@ -23,137 +47,112 @@ export default function ChatAssistant() {
       const data = await r.json()
       addChatMessage({ role: 'assistant', text: data.reply })
     } catch {
-      addChatMessage({ role: 'assistant', text: 'Connection error. Please try again.' })
+      addChatMessage({ role: 'assistant', text: 'Connection lost. Please retry.' })
     } finally {
       setLoading(false)
     }
   }
 
-  const suggestions = [
-    "What's causing congestion?",
-    "When will traffic clear?",
-    "System efficiency status",
-    "Emergency protocol status",
-  ]
-
-  return (
-    <>
-      {/* Toggle button */}
-      <motion.button
-        onClick={toggleChat}
-        className="fixed bottom-4 right-4 z-50 w-12 h-12 rounded-full flex items-center justify-center text-xl"
-        style={{
-          background: 'linear-gradient(135deg, #00F5FF20, #A855F720)',
-          border: '1px solid rgba(0,245,255,0.4)',
-          backdropFilter: 'blur(12px)',
-          boxShadow: '0 0 20px rgba(0,245,255,0.3)',
-        }}
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.95 }}
-      >
-        {chatOpen ? '✕' : '🤖'}
-      </motion.button>
-
-      {/* Chat drawer */}
-      <AnimatePresence>
-        {chatOpen && (
+  const ui = (
+    <AnimatePresence>
+      {chatOpen && (
+        <div className="fixed inset-0 z-[9999] pointer-events-none">
+          {/* Backdrop */}
           <motion.div
-            className="fixed bottom-20 right-4 z-50 w-80 rounded-2xl overflow-hidden flex flex-col"
-            style={{
-              height: 420,
-              background: 'rgba(10,14,26,0.96)',
-              border: '1px solid rgba(0,245,255,0.2)',
-              backdropFilter: 'blur(24px)',
-              boxShadow: '0 0 40px rgba(0,245,255,0.15)',
-            }}
-            initial={{ opacity: 0, y: 40, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 40, scale: 0.95 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={toggleChat}
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm pointer-events-auto"
+          />
+
+          {/* Panel */}
+          <motion.div
+            className="absolute top-0 right-0 bottom-0 w-[400px] bg-[#060a18f5] border-l border-white/5 flex flex-col pointer-events-auto"
+            initial={{ x: 400 }}
+            animate={{ x: 0 }}
+            exit={{ x: 400 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
           >
             {/* Header */}
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5">
-              <div className="w-2 h-2 rounded-full bg-cyan" style={{ boxShadow: '0 0 6px #00F5FF' }} />
-              <span className="font-semibold text-sm text-cyan">NEXUS AI</span>
-              <span className="text-xs text-muted ml-auto">Assistant</span>
+            <div className="p-6 pb-4 border-b border-white/5">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="font-heading font-bold text-[11px] tracking-[0.2em] text-white/90 mb-1">NEXUS AI</h2>
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green animate-pulse-soft" />
+                    <span className="text-[9px] text-muted font-mono">Operational</span>
+                  </div>
+                </div>
+                <button onClick={toggleChat} className="text-muted hover:text-white transition-colors text-lg p-1">×</button>
+              </div>
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-3">
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
               {chatMessages.map((m, i) => (
                 <motion.div
                   key={i}
-                  className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
+                  className="flex flex-col"
                 >
-                  <div
-                    className="max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed"
-                    style={{
-                      background: m.role === 'user'
-                        ? 'rgba(0,245,255,0.12)'
-                        : 'rgba(255,255,255,0.05)',
-                      border: m.role === 'user'
-                        ? '1px solid rgba(0,245,255,0.25)'
-                        : '1px solid rgba(255,255,255,0.06)',
-                      color: m.role === 'user' ? '#00F5FF' : '#E8F4FF',
-                    }}
-                  >
-                    {m.text}
+                  <span className="text-[8px] font-bold text-muted uppercase tracking-widest mb-2">
+                    {m.role === 'user' ? 'You' : 'Nexus AI'}
+                  </span>
+                  <div className={`px-4 py-3 rounded-xl text-[12px] leading-relaxed ${
+                    m.role === 'user'
+                    ? 'bg-cyan/6 text-white/90 border border-cyan/10'
+                    : 'bg-white/3 text-white/80 border border-white/5'
+                  }`}>
+                    {m.role === 'assistant' ? <Typewriter text={m.text} /> : m.text}
                   </div>
                 </motion.div>
               ))}
               {loading && (
-                <div className="flex justify-start">
-                  <div className="rounded-xl px-3 py-2 text-xs border border-white/10" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                    <span className="text-muted">Analyzing</span>
-                    <span className="animate-pulse">...</span>
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1">
+                    {[0, 1, 2].map(d => (
+                      <motion.div
+                        key={d}
+                        animate={{ opacity: [0.2, 1, 0.2] }}
+                        transition={{ repeat: Infinity, duration: 0.8, delay: d * 0.15 }}
+                        className="w-1 h-1 rounded-full bg-cyan"
+                      />
+                    ))}
                   </div>
+                  <span className="text-[9px] text-muted font-mono">Processing...</span>
                 </div>
               )}
               <div ref={bottomRef} />
             </div>
 
-            {/* Suggestions */}
-            {chatMessages.length <= 1 && (
-              <div className="px-3 pb-1 flex flex-wrap gap-1">
-                {suggestions.map(s => (
-                  <button
-                    key={s}
-                    onClick={() => { setInput(s); }}
-                    className="text-xs px-2 py-1 rounded-lg border border-white/10 text-muted hover:border-cyan/40 hover:text-cyan transition-colors"
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            )}
-
             {/* Input */}
-            <div className="flex gap-2 p-3 border-t border-white/5">
-              <input
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && send()}
-                placeholder="Ask NEXUS AI..."
-                className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-muted outline-none focus:border-cyan/40 transition-colors"
-              />
-              <button
-                onClick={send}
-                disabled={!input.trim() || loading}
-                className="px-3 py-2 rounded-lg text-xs font-bold transition-all"
-                style={{
-                  background: input.trim() ? 'rgba(0,245,255,0.15)' : 'rgba(255,255,255,0.05)',
-                  border: `1px solid ${input.trim() ? 'rgba(0,245,255,0.4)' : 'rgba(255,255,255,0.1)'}`,
-                  color: input.trim() ? '#00F5FF' : '#4A6080',
-                }}
-              >
-                ➤
-              </button>
+            <div className="p-4 border-t border-white/5">
+              <div className="relative">
+                <input
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && send()}
+                  placeholder="Ask about traffic, predictions..."
+                  className="w-full bg-white/3 border border-white/6 rounded-xl py-3 pl-4 pr-12 text-[12px] text-white placeholder-white/20 outline-none focus:border-cyan/20 transition-colors"
+                />
+                <button
+                  onClick={send}
+                  disabled={!input.trim() || loading}
+                  className={`absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg flex items-center justify-center transition-all text-sm ${
+                    input.trim() ? 'bg-cyan text-[#030712]' : 'bg-white/5 text-muted'
+                  }`}
+                >
+                  ➤
+                </button>
+              </div>
             </div>
           </motion.div>
-        )}
-      </AnimatePresence>
-    </>
+        </div>
+      )}
+    </AnimatePresence>
   )
+
+  return createPortal(ui, document.body)
 }

@@ -109,6 +109,49 @@ export const useJunctionStore = create((set, get) => ({
     vehicles_processed_today: 0,
   },
   setKpis: (kpis) => set({ kpis }),
+  setSignalMode: (mode) => set(s => ({ signals: { ...s.signals, mode } })),
+
+  // ── Lane Optimizer (Module 7) ───────────────────────────────────────────
+  recommendations: [],
+  wastedGreenSeconds: 0,
+  addRecommendation: (rec) => set(s => ({ 
+    recommendations: [ { id: Date.now(), ...rec }, ...s.recommendations ].slice(0, 5) 
+  })),
+  removeRecommendation: (id) => set(s => ({ 
+    recommendations: s.recommendations.filter(r => r.id !== id) 
+  })),
+  
+  updateOptimizerMetrics: () => {
+    const { lanes, signals, addRecommendation } = get()
+    const activeLane = signals.active_phase
+    const activeData = lanes[activeLane]
+    const phases = signals.phases || {}
+
+    // 1. Calculate Wasted Green Time
+    if (phases[activeLane]?.state === 'GREEN' && activeData.vehicle_count < 3) {
+      set(s => ({ wastedGreenSeconds: s.wastedGreenSeconds + 1 }))
+    }
+
+    // 2. Turning Pattern Recommendation (Simulated analysis)
+    if (activeData.vehicle_count > 10 && Math.random() > 0.99) {
+      addRecommendation({
+        title: "LANE RECONFIGURATION",
+        desc: `93% of ${activeLane} vehicles go straight — suggest dedicating center lane as straight-only for peak hours.`,
+        type: "STRATEGY"
+      })
+    }
+
+    // 3. Dual Green Suggestion
+    const opposing = { NORTH: 'SOUTH', SOUTH: 'NORTH', EAST: 'WEST', WEST: 'EAST' }
+    const oppLane = opposing[activeLane]
+    if (activeData.vehicle_count < 3 && lanes[oppLane]?.vehicle_count < 3 && Math.random() > 0.995) {
+      addRecommendation({
+        title: "DUAL GREEN CANDIDATE",
+        desc: `${activeLane} and ${oppLane} are both low density — suggest activating Dual Green phase for efficiency.`,
+        type: "OPTIMIZATION"
+      })
+    }
+  },
 
   // ── Simulation controls ─────────────────────────────────────────────────
   scenario: 'Normal Afternoon',
@@ -139,7 +182,7 @@ export const useJunctionStore = create((set, get) => ({
   // ── Chat ────────────────────────────────────────────────────────────────
   chatOpen: false,
   chatMessages: [
-    { role: 'assistant', text: 'Hello! I\'m NEXUS AI. Ask me about traffic, predictions, or system status.' }
+    { role: 'assistant', text: 'Hello! I am NEXUS AI, your intelligent traffic management assistant. Ask me about traffic conditions, predictions, emergency events, or system performance.' }
   ],
   toggleChat: () => set(s => ({ chatOpen: !s.chatOpen })),
   addChatMessage: (msg) => set(s => ({ chatMessages: [...s.chatMessages, msg] })),

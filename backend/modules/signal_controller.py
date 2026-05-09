@@ -102,6 +102,14 @@ class SignalController:
         self._emg_jump_pending = False
 
     @property
+    def mode(self) -> ControllerMode:
+        return self._mode
+
+    @property
+    def efficiency_score(self) -> float:
+        return self._efficiency_score
+
+    @property
     def active_lane(self) -> str:
         return LANES[self._phase_index]
 

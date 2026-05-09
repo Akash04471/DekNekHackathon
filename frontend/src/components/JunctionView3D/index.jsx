@@ -1,237 +1,285 @@
-import React, { useRef, useMemo, useState, useCallback, Suspense } from 'react'
+import React, { Suspense, useMemo, useState, useRef } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { OrbitControls, Text } from '@react-three/drei'
-import { EffectComposer, Bloom } from '@react-three/postprocessing'
+import { OrbitControls, PerspectiveCamera, Environment, Stars, Float, Text, ContactShadows } from '@react-three/drei'
 import * as THREE from 'three'
 import { useJunctionStore } from '../../store/junctionStore'
 
-const LANE_COLORS = {
-  NORTH: '#00F5FF', EAST: '#00FF88', SOUTH: '#FFB800', WEST: '#A855F7'
-}
-const LANE_DIRS  = { NORTH: [0,1], EAST:[1,0], SOUTH:[0,-1], WEST:[-1,0] }
-const SIG_COLORS = { GREEN:'#00FF88', YELLOW:'#FFB800', RED:'#FF4444' }
-const LANE_SPAWN = {
-  NORTH: { axis:'z', entry: 11, exit:-11, lateral:[[-1.5],[1.5]] },
-  SOUTH: { axis:'z', entry:-11, exit: 11, lateral:[[-1.5],[1.5]] },
-  EAST:  { axis:'x', entry: 11, exit:-11, lateral:[[-1.5],[1.5]] },
-  WEST:  { axis:'x', entry:-11, exit: 11, lateral:[[-1.5],[1.5]] },
-}
-
-// ── Road geometry with texture ────────────────────────────────────────────────
-function Road() {
-  const tex = useMemo(() => {
-    const c = document.createElement('canvas')
-    c.width = 1024; c.height = 1024
-    const ctx = c.getContext('2d')
-    // Asphalt
-    ctx.fillStyle = '#141b2d'
-    ctx.fillRect(0,0,1024,1024)
-    // Lane centre lines
-    ctx.strokeStyle = 'rgba(255,255,255,0.5)'
-    ctx.lineWidth = 4
-    ctx.setLineDash([60,40])
-    ctx.beginPath(); ctx.moveTo(512,0); ctx.lineTo(512,1024); ctx.stroke()
-    ctx.beginPath(); ctx.moveTo(0,512); ctx.lineTo(1024,512); ctx.stroke()
-    ctx.setLineDash([])
-    // Edge lines
-    ctx.strokeStyle = 'rgba(255,255,255,0.25)'
-    ctx.lineWidth = 6
-    ;[[260,0,260,380],[760,0,760,380],[260,644,260,1024],[760,644,760,1024],
-      [0,260,380,260],[644,260,1024,260],[0,760,380,760],[644,760,1024,760]].forEach(([x1,y1,x2,y2])=>{
-      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke()
-    })
-    // Zebra crossings
-    ctx.fillStyle = 'rgba(255,255,255,0.72)'
-    for(let i=0;i<7;i++){
-      ctx.fillRect(280+i*26,180,14,70)
-      ctx.fillRect(280+i*26,774,14,70)
-      ctx.fillRect(180,280+i*26,70,14)
-      ctx.fillRect(774,280+i*26,70,14)
+// ─── Procedural City ─────────────────────────────────────────────────
+function CityEnvironment() {
+  const buildings = useMemo(() => {
+    const b = []
+    for (let i = 0; i < 80; i++) {
+      const x = (Math.random() - 0.5) * 250
+      const z = (Math.random() - 0.5) * 250
+      if (Math.abs(x) < 22 && Math.abs(z) < 22) continue
+      const h = 15 + Math.random() * 80
+      b.push({ id: i, pos: [x, h / 2, z], w: 6 + Math.random() * 12, h, d: 6 + Math.random() * 12 })
     }
-    // Glow centre cross
-    const grad = ctx.createRadialGradient(512,512,10,512,512,180)
-    grad.addColorStop(0,'rgba(0,245,255,0.12)')
-    grad.addColorStop(1,'rgba(0,245,255,0)')
-    ctx.fillStyle = grad
-    ctx.fillRect(0,0,1024,1024)
-    const t = new THREE.CanvasTexture(c)
-    return t
+    return b
   }, [])
 
   return (
-    <mesh rotation={[-Math.PI/2,0,0]} receiveShadow position={[0,0,0]}>
-      <planeGeometry args={[26,26]} />
-      <meshStandardMaterial map={tex} roughness={0.85} metalness={0.1}/>
-    </mesh>
-  )
-}
-
-// ── Congestion heatmap (only visible at higher densities) ─────────────────────
-function HeatmapOverlay() {
-  const lanes  = useJunctionStore(s=>s.lanes)
-  const ref    = useRef()
-  useFrame(()=>{
-    if(!ref.current) return
-    const avg = Object.values(lanes).reduce((a,l)=>a+l.density_score,0)/4
-    const t   = avg/100
-    const col = new THREE.Color()
-    if(t < 0.5) col.lerpColors(new THREE.Color('#003388'), new THREE.Color('#886600'), t*2)
-    else        col.lerpColors(new THREE.Color('#886600'), new THREE.Color('#881100'), (t-0.5)*2)
-    ref.current.material.color = col
-    ref.current.material.opacity = Math.max(0, t*0.22 - 0.01)
-  })
-  return (
-    <mesh ref={ref} rotation={[-Math.PI/2,0,0]} position={[0,0.04,0]}>
-      <planeGeometry args={[26,26]}/>
-      <meshBasicMaterial transparent side={THREE.DoubleSide}/>
-    </mesh>
-  )
-}
-
-// ── Traffic light at corner ───────────────────────────────────────────────────
-function TrafficLight({ pos, lane }) {
-  const phase = useJunctionStore(s=>s.signals.phases?.[lane]) || {}
-  const state = phase.state || 'RED'
-  return (
-    <group position={pos}>
-      <mesh position={[0,1.5,0]}>
-        <cylinderGeometry args={[0.07,0.07,3,8]}/>
-        <meshStandardMaterial color="#1c2230" metalness={0.9} roughness={0.2}/>
-      </mesh>
-      <mesh position={[0,3.2,0]}>
-        <boxGeometry args={[0.38,1.0,0.38]}/>
-        <meshStandardMaterial color="#0a0f1a" metalness={0.5}/>
-      </mesh>
-      {[['RED',3.55],['YELLOW',3.2],['GREEN',2.85]].map(([s,y])=>(
-        <mesh key={s} position={[0,y,0.2]}>
-          <sphereGeometry args={[0.11,12,12]}/>
-          <meshStandardMaterial
-            color={state===s ? SIG_COLORS[s] : '#0d1220'}
-            emissive={state===s ? SIG_COLORS[s] : '#000'}
-            emissiveIntensity={state===s ? 4 : 0}
-          />
+    <group>
+      {buildings.map(b => (
+        <mesh key={b.id} position={b.pos} castShadow receiveShadow>
+          <boxGeometry args={[b.w, b.h, b.d]} />
+          <meshStandardMaterial color="#070c18" roughness={0.3} metalness={0.7} />
         </mesh>
       ))}
-      {state!=='RED' && (
-        <pointLight position={[0,3.2,0.6]} color={SIG_COLORS[state]} intensity={3} distance={6}/>
+      <gridHelper args={[400, 80, '#0d1525', '#080e1c']} position={[0, 0.02, 0]} />
+    </group>
+  )
+}
+
+// ─── Road System with lane markings + zebra crossings ────────────────
+function RoadSystem() {
+  const dashes = useMemo(() => {
+    const d = []
+    for (let i = -180; i < 180; i += 12) {
+      d.push(i)
+    }
+    return d
+  }, [])
+
+  return (
+    <group>
+      {/* Main roads */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]} receiveShadow>
+        <planeGeometry args={[400, 28]} />
+        <meshStandardMaterial color="#0c0c0c" roughness={0.9} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, Math.PI / 2]} position={[0, 0.01, 0]} receiveShadow>
+        <planeGeometry args={[400, 28]} />
+        <meshStandardMaterial color="#0c0c0c" roughness={0.9} />
+      </mesh>
+
+      {/* Center line dashes (E-W road) */}
+      {dashes.map((x, i) => (
+        Math.abs(x) > 16 ? (
+          <mesh key={`ew-${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[x, 0.06, 0]}>
+            <planeGeometry args={[6, 0.2]} />
+            <meshBasicMaterial color="#2a3a55" transparent opacity={0.6} />
+          </mesh>
+        ) : null
+      ))}
+
+      {/* Center line dashes (N-S road) */}
+      {dashes.map((z, i) => (
+        Math.abs(z) > 16 ? (
+          <mesh key={`ns-${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.06, z]}>
+            <planeGeometry args={[0.2, 6]} />
+            <meshBasicMaterial color="#2a3a55" transparent opacity={0.6} />
+          </mesh>
+        ) : null
+      ))}
+
+      {/* Zebra crossings at each approach */}
+      {[
+        { pos: [0, 0.07, -15], rot: 0 },
+        { pos: [0, 0.07, 15], rot: 0 },
+        { pos: [-15, 0.07, 0], rot: Math.PI / 2 },
+        { pos: [15, 0.07, 0], rot: Math.PI / 2 },
+      ].map((z, zi) => (
+        <group key={`zebra-${zi}`} position={z.pos} rotation={[0, z.rot, 0]}>
+          {Array.from({ length: 6 }, (_, j) => (
+            <mesh key={j} rotation={[-Math.PI / 2, 0, 0]} position={[(j - 2.5) * 2, 0, 0]}>
+              <planeGeometry args={[1.2, 5]} />
+              <meshBasicMaterial color="#1a2540" transparent opacity={0.4} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+
+      {/* Junction intersection */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
+        <planeGeometry args={[28, 28]} />
+        <meshStandardMaterial color="#0e0e0e" metalness={0.3} roughness={0.5} />
+      </mesh>
+    </group>
+  )
+}
+
+// ─── Congestion Heatmap Overlay ──────────────────────────────────────
+function HeatmapOverlay({ lanes, visible }) {
+  if (!visible) return null
+
+  const positions = {
+    NORTH: [0, 0.15, -40],
+    SOUTH: [0, 0.15, 40],
+    EAST: [40, 0.15, 0],
+    WEST: [-40, 0.15, 0],
+  }
+  const rotations = {
+    NORTH: [-Math.PI / 2, 0, 0],
+    SOUTH: [-Math.PI / 2, 0, 0],
+    EAST: [-Math.PI / 2, 0, Math.PI / 2],
+    WEST: [-Math.PI / 2, 0, Math.PI / 2],
+  }
+
+  return (
+    <group>
+      {Object.entries(lanes).map(([lane, data]) => {
+        const d = data.density_score || 0
+        const color = d > 70 ? '#f87171' : d > 40 ? '#fbbf24' : '#60a5fa'
+        const opacity = 0.05 + (d / 100) * 0.15
+        return (
+          <mesh key={lane} rotation={rotations[lane]} position={positions[lane]}>
+            <planeGeometry args={[24, 50]} />
+            <meshBasicMaterial color={color} transparent opacity={opacity} />
+          </mesh>
+        )
+      })}
+    </group>
+  )
+}
+
+// ─── Sound Wave Rings (when siren detected) ──────────────────────────
+function SirenWaveRings({ sirenDetected }) {
+  const ringsRef = useRef([])
+
+  useFrame(({ clock }) => {
+    if (!sirenDetected) return
+    ringsRef.current.forEach((ring, i) => {
+      if (!ring) return
+      const t = (clock.getElapsedTime() + i * 0.6) % 3
+      const scale = 1 + t * 15
+      ring.scale.set(scale, scale, 1)
+      ring.material.opacity = Math.max(0, 0.3 - t * 0.1)
+    })
+  })
+
+  if (!sirenDetected) return null
+
+  return (
+    <group position={[0, 1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      {[0, 1, 2, 3].map(i => (
+        <mesh key={i} ref={el => ringsRef.current[i] = el}>
+          <ringGeometry args={[0.8, 1, 64]} />
+          <meshBasicMaterial color="#f87171" transparent opacity={0.2} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+// ─── Traffic Lights ──────────────────────────────────────────────────
+function TrafficLights() {
+  const signals = useJunctionStore(s => s.signals)
+  const phases = signals.phases || {}
+
+  const positions = [
+    { lane: 'NORTH', pos: [6, 0, -16] },
+    { lane: 'SOUTH', pos: [-6, 0, 16] },
+    { lane: 'EAST',  pos: [16, 0, 6] },
+    { lane: 'WEST',  pos: [-16, 0, -6] },
+  ]
+
+  return (
+    <group>
+      {positions.map(p => {
+        const state = phases[p.lane]?.state || 'RED'
+        const color = state === 'GREEN' ? '#34d399' : state === 'YELLOW' ? '#fbbf24' : '#f87171'
+        return (
+          <group key={p.lane} position={p.pos}>
+            <mesh position={[0, 4, 0]}>
+              <cylinderGeometry args={[0.15, 0.15, 8]} />
+              <meshStandardMaterial color="#1a1a1a" />
+            </mesh>
+            <mesh position={[0, 8.5, 0]}>
+              <boxGeometry args={[0.8, 2.4, 0.8]} />
+              <meshStandardMaterial color="#111" />
+            </mesh>
+            {/* Red/Yellow/Green indicator lights */}
+            {['#f87171', '#fbbf24', '#34d399'].map((c, i) => (
+              <mesh key={i} position={[0, 9.2 - i * 0.7, 0.45]}>
+                <sphereGeometry args={[0.2, 12, 12]} />
+                <meshStandardMaterial
+                  color={c === color ? c : '#111'}
+                  emissive={c === color ? c : '#000'}
+                  emissiveIntensity={c === color ? 3 : 0}
+                />
+              </mesh>
+            ))}
+            <pointLight position={[0, 8.5, 1]} intensity={2} color={color} distance={20} decay={2} />
+          </group>
+        )
+      })}
+    </group>
+  )
+}
+
+// ─── Vehicle ─────────────────────────────────────────────────────────
+function Vehicle({ lane, index }) {
+  const meshRef = useRef()
+  const signals = useJunctionStore(s => s.signals)
+  const laneData = useJunctionStore(s => s.lanes[lane])
+  const signalState = signals.phases?.[lane]?.state || 'RED'
+  const isEmergencyVehicle = laneData?.has_emergency && index === 0
+
+  const speed = useRef(0)
+  const progress = useRef(-10 - (index * 8))
+  const vehicleColor = useMemo(() => {
+    if (isEmergencyVehicle) return '#f87171'
+    const colors = ['#94a3b8', '#64748b', '#78716c', '#a3a3a3', '#60a5fa']
+    return colors[index % colors.length]
+  }, [isEmergencyVehicle, index])
+
+  useFrame((_, delta) => {
+    if (!meshRef.current) return
+    const isGreen = signalState === 'GREEN'
+    const stopZone = progress.current > -20 && progress.current < -12
+    const targetSpeed = isGreen || isEmergencyVehicle ? 14 : (stopZone ? 0 : 14)
+    speed.current = THREE.MathUtils.lerp(speed.current, targetSpeed, delta * 3)
+    progress.current += speed.current * delta
+
+    if (progress.current > 120) progress.current = -80
+
+    const p = progress.current
+    const m = meshRef.current
+    switch (lane) {
+      case 'NORTH': m.position.set(-4, 0.7, p); m.rotation.set(0, 0, 0); break
+      case 'SOUTH': m.position.set(4, 0.7, -p); m.rotation.set(0, Math.PI, 0); break
+      case 'EAST':  m.position.set(-p, 0.7, -4); m.rotation.set(0, Math.PI / 2, 0); break
+      case 'WEST':  m.position.set(p, 0.7, 4); m.rotation.set(0, -Math.PI / 2, 0); break
+    }
+  })
+
+  return (
+    <group ref={meshRef}>
+      {/* Body */}
+      <mesh castShadow>
+        <boxGeometry args={isEmergencyVehicle ? [2.5, 1.6, 5] : [2, 1, 4]} />
+        <meshStandardMaterial color={vehicleColor} roughness={0.4} metalness={0.5} />
+      </mesh>
+      {/* Cabin */}
+      <mesh position={[0, 0.6, -0.3]}>
+        <boxGeometry args={[1.6, 0.5, 1.8]} />
+        <meshStandardMaterial color="#0a0a0a" roughness={0.1} metalness={0.9} transparent opacity={0.6} />
+      </mesh>
+      {/* Taillights */}
+      <mesh position={[0, 0.2, -2.1]}>
+        <boxGeometry args={[1.8, 0.25, 0.08]} />
+        <meshStandardMaterial color="#ff2020" emissive="#ff2020" emissiveIntensity={0.8} />
+      </mesh>
+      {/* Emergency light bar */}
+      {isEmergencyVehicle && (
+        <mesh position={[0, 1.3, 0]}>
+          <boxGeometry args={[1.5, 0.3, 0.5]} />
+          <meshStandardMaterial color="#ff0000" emissive="#ff0000" emissiveIntensity={4} />
+        </mesh>
       )}
     </group>
   )
 }
 
-// ── Single animated vehicle ───────────────────────────────────────────────────
-function AnimVehicle({ lane, idx, total, isEmg, isTruck }) {
-  const ref  = useRef()
-  const color = isEmg ? '#FF4444' : LANE_COLORS[lane]
-  const sp = LANE_SPAWN[lane]
-  const lateral = (idx%2===0 ? 1.8 : -1.8) * (lane==='NORTH'||lane==='SOUTH'?1:-1)
-  const spread  = 18 / Math.max(total,1)
-  const baseOffset = -9 + (idx+0.5)*spread
-  const speed  = isEmg ? 3.5 : 1.2 + Math.random()*1.2
-  const len    = 22
-
-  useFrame((_,dt)=>{
-    if(!ref.current) return
-    if(sp.axis==='z') {
-      ref.current.position.z -= (sp.entry>0?1:-1)*speed*dt
-      if(sp.entry>0 && ref.current.position.z < sp.exit) ref.current.position.z = sp.entry
-      if(sp.entry<0 && ref.current.position.z > sp.exit) ref.current.position.z = sp.entry
-    } else {
-      ref.current.position.x -= (sp.entry>0?1:-1)*speed*dt
-      if(sp.entry>0 && ref.current.position.x < sp.exit) ref.current.position.x = sp.entry
-      if(sp.entry<0 && ref.current.position.x > sp.exit) ref.current.position.x = sp.entry
-    }
-    if(isEmg) {
-      const t = Date.now()*0.005
-      ref.current.material.emissiveIntensity = 1.5+Math.sin(t)*0.8
-    }
-  })
-
-  const initPos = sp.axis==='z'
-    ? [lateral, 0.22, sp.entry - (idx/(total||1))*len*(sp.entry>0?1:-1)]
-    : [sp.entry - (idx/(total||1))*len*(sp.entry>0?1:-1), 0.22, lateral]
-
-  const rot = sp.axis==='z' ? [0,0,0] : [0,Math.PI/2,0]
-  const geom = isTruck ? [0.75,0.42,2.4] : isEmg ? [0.80,0.38,2.0] : [0.65,0.28,1.5]
-
-  return (
-    <mesh ref={ref} position={initPos} rotation={rot} castShadow>
-      <boxGeometry args={geom}/>
-      <meshStandardMaterial
-        color={color} emissive={color}
-        emissiveIntensity={isEmg?2.0:0.35} roughness={0.4} metalness={0.6}
-      />
-    </mesh>
-  )
-}
-
-function LaneVehicles({ lane }) {
-  const d = useJunctionStore(s=>s.lanes[lane]) || {}
-  const count = Math.min(d.vehicle_count||0, 10)
-  const trucks = d.vehicle_types?.truck||0
-  const hasEmg = d.has_emergency||false
+function VehicleSystem() {
+  const lanes = useJunctionStore(s => s.lanes)
   return (
     <group>
-      {hasEmg && <AnimVehicle key="emg" lane={lane} idx={0} total={Math.max(count,1)} isEmg isTruck={false}/>}
-      {Array.from({length:count},(_,i)=>(
-        <AnimVehicle key={i} lane={lane} idx={hasEmg?i+1:i} total={count+1} isEmg={false} isTruck={i<trucks}/>
-      ))}
-    </group>
-  )
-}
-
-// ── Sound wave rings ──────────────────────────────────────────────────────────
-function SoundWaves() {
-  const audio = useJunctionStore(s=>s.audio)
-  const rings = useRef([])
-  useFrame(({clock})=>{
-    rings.current.forEach((r,i)=>{
-      if(!r) return
-      const t = (clock.elapsedTime*0.65+i*0.35)%1
-      r.scale.set(1+t*4,1,1+t*4)
-      r.material.opacity = audio.siren_detected?(1-t)*0.7:0
-    })
-  })
-  return (
-    <group position={[0,0.15,0]} rotation={[-Math.PI/2,0,0]}>
-      {[0,1,2].map(i=>(
-        <mesh key={i} ref={el=>rings.current[i]=el}>
-          <ringGeometry args={[2,2.25,48]}/>
-          <meshBasicMaterial color="#FF4444" transparent side={THREE.DoubleSide}/>
-        </mesh>
-      ))}
-    </group>
-  )
-}
-
-// ── City skyline ──────────────────────────────────────────────────────────────
-function CityBuildings() {
-  const buildings = useMemo(()=>{
-    const pts = [
-      [-20,-20],[-16,-20],[-12,-20],[-8,-22],[-20,-16],[-20,-12],[-22,-8],
-      [20,-20],[16,-20],[12,-20],[8,-22],[20,-16],[20,-12],[22,-8],
-      [-20,20],[-16,20],[-12,20],[-8,22],[-20,16],[-20,12],[-22,8],
-      [20,20],[16,20],[12,20],[8,22],[20,16],[20,12],[22,8],
-    ]
-    return pts.map(([x,z],i)=>{
-      const h=3+Math.abs(Math.sin(i*2.3))*9
-      return { x,z,h,w:1.8+Math.abs(Math.sin(i))*1.2,d:1.8+Math.abs(Math.cos(i))*1.2,key:i }
-    })
-  },[])
-  return (
-    <group>
-      {buildings.map(b=>(
-        <group key={b.key} position={[b.x,0,b.z]}>
-          <mesh position={[0,b.h/2,0]} castShadow>
-            <boxGeometry args={[b.w,b.h,b.d]}/>
-            <meshStandardMaterial color="#0c1220" emissive="#1a2a40" emissiveIntensity={0.4} roughness={0.9}/>
-          </mesh>
-          {/* Window lights */}
-          {Array.from({length:Math.floor(b.h/2)},(_,j)=>(
-            <mesh key={j} position={[0,1.5+j*2,b.d/2+0.01]}>
-              <planeGeometry args={[b.w*0.6,0.4]}/>
-              <meshBasicMaterial color={j%3===0?'#FFB800':j%3===1?'#00F5FF':'#ffffff'} transparent opacity={0.3}/>
-            </mesh>
+      {Object.keys(lanes).map(lane => (
+        <group key={lane}>
+          {Array.from({ length: Math.min(Math.max(lanes[lane].vehicle_count, 3), 12) }).map((_, i) => (
+            <Vehicle key={`${lane}-${i}`} lane={lane} index={i} />
           ))}
         </group>
       ))}
@@ -239,109 +287,138 @@ function CityBuildings() {
   )
 }
 
-// ── Lane label ────────────────────────────────────────────────────────────────
-function LaneLabel({ lane }) {
-  const [dx,dz] = LANE_DIRS[lane]
+// ─── Floating Labels ─────────────────────────────────────────────────
+function FloatingLabel({ lane, data, visible }) {
+  if (!visible) return null
+  const pos = {
+    NORTH: [0, 14, -30],
+    SOUTH: [0, 14, 30],
+    EAST: [30, 14, 0],
+    WEST: [-30, 14, 0]
+  }[lane]
+
   return (
-    <Text position={[dx*12,0.6,dz*12]} rotation={[-Math.PI/2,0,0]}
-      fontSize={0.8} color={LANE_COLORS[lane]} anchorX="center" anchorY="middle"
-      outlineWidth={0.04} outlineColor="#000">
-      {lane}
-    </Text>
+    <Float speed={1.5} rotationIntensity={0.1} floatIntensity={0.3}>
+      <group position={pos}>
+        <mesh>
+          <planeGeometry args={[10, 4.5]} />
+          <meshBasicMaterial color="#050810" transparent opacity={0.85} />
+        </mesh>
+        <Text position={[0, 0.8, 0.1]} fontSize={0.9} color="#94a3b8" anchorX="center">
+          {lane}
+        </Text>
+        <Text position={[0, -0.5, 0.1]} fontSize={0.7} color="#e2e8f0" anchorX="center">
+          {data.vehicle_count} units · {Math.round(data.density_score)}%
+        </Text>
+      </group>
+    </Float>
   )
 }
 
-// ── Ground grid ───────────────────────────────────────────────────────────────
-function GroundGrid() {
-  const ref = useRef()
-  return (
-    <gridHelper ref={ref} args={[60,40,'#001a2a','#001a2a']} position={[0,-0.01,0]}/>
-  )
+// ─── Camera Presets ──────────────────────────────────────────────────
+const CAMERA_VIEWS = {
+  ORBIT:   { pos: [70, 55, 70], label: 'Orbit' },
+  TOP:     { pos: [0, 120, 0.1], label: 'Top-Down' },
+  ISO:     { pos: [80, 60, 80], label: 'Isometric' },
+  STREET:  { pos: [5, 6, 50], label: 'Street' },
 }
 
-// ── Camera views ──────────────────────────────────────────────────────────────
-const VIEWS = {
-  TOP:    { pos:[0,28,0.01],   target:[0,0,0] },
-  ISO:    { pos:[0,22,18],     target:[0,0,0] },
-  STREET: { pos:[0,3,16],      target:[0,1,0] },
-}
-
-function CameraController({ view, controlsRef }) {
-  useFrame(({ camera }) => {
-    const v = VIEWS[view]
-    camera.position.lerp(new THREE.Vector3(...v.pos), 0.05)
-    if(controlsRef.current) controlsRef.current.target.lerp(new THREE.Vector3(...v.target), 0.05)
-  })
-  return null
-}
-
-// ── Main ─────────────────────────────────────────────────────────────────────
+// ─── Main Export ──────────────────────────────────────────────────────
 export default function JunctionView3D() {
-  const [view, setView] = useState('ISO')
+  const lanes = useJunctionStore(s => s.lanes)
+  const audio = useJunctionStore(s => s.audio)
+  const [showHeatmap, setShowHeatmap] = useState(true)
+  const [showLabels, setShowLabels] = useState(true)
+  const [cameraView, setCameraView] = useState('ORBIT')
   const controlsRef = useRef()
 
+  const camPos = CAMERA_VIEWS[cameraView].pos
+
   return (
-    <div style={{ width:'100%', height:'100%', position:'relative' }}>
-      <Canvas shadows={{ type: THREE.PCFShadowMap }} camera={{ position:[0,22,18], fov:44 }} style={{ background:'#050810' }}>
-        {/* Lighting */}
-        <ambientLight intensity={0.12}/>
-        <directionalLight position={[15,25,10]} intensity={0.5} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024}/>
-        <pointLight position={[0,10,0]} color="#00F5FF" intensity={0.8} distance={25}/>
-        <pointLight position={[0,6,0]} color="#A855F7" intensity={0.15} distance={15}/>
+    <div className="w-full h-full relative">
+      <Canvas
+        shadows
+        gl={{ antialias: true, powerPreference: 'high-performance', alpha: false }}
+        onCreated={({ gl }) => { gl.toneMapping = THREE.ACESFilmicToneMapping; gl.toneMappingExposure = 0.8 }}
+      >
+        <PerspectiveCamera makeDefault position={camPos} fov={38} />
+        <OrbitControls
+          ref={controlsRef}
+          enableDamping
+          dampingFactor={0.05}
+          maxPolarAngle={Math.PI / 2.3}
+          minDistance={15}
+          maxDistance={200}
+          autoRotate={cameraView === 'ORBIT'}
+          autoRotateSpeed={0.3}
+        />
+
+        <color attach="background" args={['#020408']} />
+        <fog attach="fog" args={['#020408', 60, 280]} />
+
+        <ambientLight intensity={0.15} />
+        <directionalLight position={[40, 80, 30]} intensity={2} castShadow shadow-mapSize={2048} color="#b0d0ff" />
+        <hemisphereLight intensity={0.3} color="#0a1530" groundColor="#000" />
+        <pointLight position={[0, 30, 0]} intensity={1} color="#00d4e0" distance={80} decay={2} />
 
         <Suspense fallback={null}>
-          <CityBuildings/>
-          <GroundGrid/>
-          <Road/>
-          <HeatmapOverlay/>
+          <CityEnvironment />
+          <RoadSystem />
+          <TrafficLights />
+          <VehicleSystem />
+          <HeatmapOverlay lanes={lanes} visible={showHeatmap} />
+          <SirenWaveRings sirenDetected={audio?.siren_detected} />
 
-          {/* Traffic lights */}
-          <TrafficLight pos={[ 6.5,0, 6.5]} lane="NORTH"/>
-          <TrafficLight pos={[-6.5,0, 6.5]} lane="EAST"/>
-          <TrafficLight pos={[ 6.5,0,-6.5]} lane="SOUTH"/>
-          <TrafficLight pos={[-6.5,0,-6.5]} lane="WEST"/>
+          {Object.entries(lanes).map(([lane, data]) => (
+            <FloatingLabel key={lane} lane={lane} data={data} visible={showLabels} />
+          ))}
 
-          {/* Vehicles */}
-          {['NORTH','EAST','SOUTH','WEST'].map(l=><LaneVehicles key={l} lane={l}/>)}
-
-          {/* Lane labels */}
-          {['NORTH','EAST','SOUTH','WEST'].map(l=><LaneLabel key={l} lane={l}/>)}
-
-          {/* Sound waves */}
-          <SoundWaves/>
-
-          <EffectComposer>
-            <Bloom luminanceThreshold={0.15} luminanceSmoothing={0.85} intensity={1.4} radius={0.9}/>
-          </EffectComposer>
+          <Stars radius={200} depth={80} count={2000} factor={3} saturation={0} fade speed={0.5} />
+          <Environment preset="night" />
+          <ContactShadows resolution={1024} scale={300} blur={3} opacity={0.15} far={15} />
         </Suspense>
-
-        <CameraController view={view} controlsRef={controlsRef}/>
-        <OrbitControls ref={controlsRef} enablePan={false} maxPolarAngle={Math.PI/2.1} minDistance={6} maxDistance={45}/>
       </Canvas>
 
-      {/* View controls overlay */}
-      <div style={{ position:'absolute', bottom:12, left:12, display:'flex', gap:6, zIndex:10 }}>
-        {Object.keys(VIEWS).map(v=>(
-          <button key={v} onClick={()=>setView(v)}
-            style={{
-              fontSize:10, padding:'4px 10px', borderRadius:8, cursor:'pointer',
-              background: view===v ? 'rgba(0,245,255,0.15)' : 'rgba(10,14,26,0.85)',
-              border:`1px solid ${view===v?'rgba(0,245,255,0.5)':'rgba(255,255,255,0.1)'}`,
-              color: view===v ? '#00F5FF' : '#4A6080',
-              backdropFilter:'blur(8px)', transition:'all 0.2s',
-            }}>
-            {v==='TOP'?'⊙ TOP':v==='ISO'?'◎ ISO':'👁 STREET'}
+      {/* Minimal HUD */}
+      <div className="absolute top-5 left-5 flex items-center gap-2 pointer-events-none">
+        <div className="w-1.5 h-1.5 rounded-full bg-cyan animate-pulse-soft" />
+        <span className="text-[9px] font-heading font-bold tracking-[0.2em] text-cyan/60">LIVE 3D FEED</span>
+      </div>
+
+      {/* View + Toggle controls */}
+      <div className="absolute bottom-5 left-5 flex gap-2 z-50">
+        {Object.entries(CAMERA_VIEWS).map(([key, v]) => (
+          <button
+            key={key}
+            onClick={() => setCameraView(key)}
+            className={`px-3 py-1.5 rounded-lg text-[8px] font-heading font-bold tracking-wider uppercase transition-all border ${
+              cameraView === key
+                ? 'border-cyan/30 bg-cyan/8 text-cyan'
+                : 'border-white/5 bg-black/60 text-muted hover:text-white/70'
+            }`}
+          >
+            {v.label}
           </button>
         ))}
       </div>
 
-      {/* Mode badge */}
-      <div style={{ position:'absolute', top:12, right:12, zIndex:10 }}>
-        <div style={{
-          fontSize:10, padding:'4px 10px', borderRadius:8, fontFamily:'JetBrains Mono',
-          background:'rgba(10,14,26,0.85)', border:'1px solid rgba(0,245,255,0.3)',
-          color:'#00F5FF', backdropFilter:'blur(8px)', letterSpacing:'0.1em',
-        }}>3D LIVE</div>
+      <div className="absolute bottom-5 right-5 flex gap-2 z-50">
+        <button
+          onClick={() => setShowHeatmap(!showHeatmap)}
+          className={`px-3 py-1.5 rounded-lg text-[8px] font-heading font-bold tracking-wider uppercase transition-all border ${
+            showHeatmap ? 'border-cyan/30 bg-cyan/8 text-cyan' : 'border-white/5 bg-black/60 text-muted'
+          }`}
+        >
+          Heatmap
+        </button>
+        <button
+          onClick={() => setShowLabels(!showLabels)}
+          className={`px-3 py-1.5 rounded-lg text-[8px] font-heading font-bold tracking-wider uppercase transition-all border ${
+            showLabels ? 'border-cyan/30 bg-cyan/8 text-cyan' : 'border-white/5 bg-black/60 text-muted'
+          }`}
+        >
+          Labels
+        </button>
       </div>
     </div>
   )

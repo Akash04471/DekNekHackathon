@@ -1,7 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useJunctionStore } from '../store/junctionStore'
 
-// Connect directly to backend port to avoid Vite WS proxy issues
 const WS_BASE = 'ws://localhost:8000'
 
 function makeWs(path, channelName, storeAction) {
@@ -26,7 +25,6 @@ function makeWs(path, channelName, storeAction) {
     ws.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data)
-        // Always call from current store to avoid stale module refs after HMR
         storeAction(data)
       } catch (_) {}
     }
@@ -52,9 +50,7 @@ function makeWs(path, channelName, storeAction) {
 
 let wsCleanups = []
 
-// Initialize WebSocket connections once (not in React effect to avoid HMR issues)
 function initWebSockets() {
-  // Clean up any existing connections
   wsCleanups.forEach(fn => fn())
   wsCleanups = [
     makeWs('/ws/detection',   'detection',   (d) => useJunctionStore.getState().setDetection(d)),
@@ -67,21 +63,57 @@ function initWebSockets() {
 export function useWebSockets() {
   useEffect(() => {
     initWebSockets()
-    // No cleanup here — we want persistent connections
-    // They'll be cleaned up on page unload naturally
   }, [])
 }
 
+// Also poll /api/lanes every 2s as a reliable fallback for lane data
+// This ensures data is always fresh even if the detection WebSocket has issues
 export function useKpiPoller() {
   useEffect(() => {
-    const poll = async () => {
+    const pollKpis = async () => {
       try {
         const r = await fetch('/api/kpis')
         if (r.ok) useJunctionStore.getState().setKpis(await r.json())
       } catch (_) {}
     }
+    pollKpis()
+    const id = setInterval(pollKpis, 10000)
+    return () => clearInterval(id)
+  }, [])
+}
+
+// Poll lanes as fallback to ensure data always flows
+export function useLanePoller() {
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const r = await fetch('/api/lanes')
+        if (r.ok) {
+          const data = await r.json()
+          useJunctionStore.getState().setDetection({ lanes: data })
+        }
+      } catch (_) {}
+    }
     poll()
-    const id = setInterval(poll, 10000)
+    const id = setInterval(poll, 2000)
+    return () => clearInterval(id)
+  }, [])
+}
+
+// Poll audio status as fallback
+export function useAudioPoller() {
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const r = await fetch('/api/audio/status')
+        if (r.ok) {
+          const data = await r.json()
+          useJunctionStore.getState().setAudio(data)
+        }
+      } catch (_) {}
+    }
+    poll()
+    const id = setInterval(poll, 1000)
     return () => clearInterval(id)
   }, [])
 }
