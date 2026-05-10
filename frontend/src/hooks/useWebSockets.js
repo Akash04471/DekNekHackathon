@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { useJunctionStore } from '../store/junctionStore'
+const API_BASE = import.meta.env.VITE_API_URL || ''
 
-const WS_BASE = 'ws://localhost:8080'
+const WS_BASE = import.meta.env.VITE_WS_URL || 'ws://localhost:8080'
 
 function makeWs(path, channelName, storeAction) {
   let ws
@@ -72,7 +73,7 @@ export function useKpiPoller() {
   useEffect(() => {
     const pollKpis = async () => {
       try {
-        const r = await fetch('/api/kpis')
+        const r = await fetch(`${API_BASE}/api/kpis`)
         if (r.ok) useJunctionStore.getState().setKpis(await r.json())
       } catch (_) {}
     }
@@ -87,7 +88,7 @@ export function useLanePoller() {
   useEffect(() => {
     const poll = async () => {
       try {
-        const r = await fetch('/api/lanes')
+        const r = await fetch(`${API_BASE}/api/lanes`)
         if (r.ok) {
           const data = await r.json()
           useJunctionStore.getState().setDetection({ lanes: data })
@@ -105,7 +106,7 @@ export function useAudioPoller() {
   useEffect(() => {
     const poll = async () => {
       try {
-        const r = await fetch('/api/audio/status')
+        const r = await fetch(`${API_BASE}/api/audio/status`)
         if (r.ok) {
           const data = await r.json()
           useJunctionStore.getState().setAudio(data)
@@ -122,7 +123,7 @@ export function useWeatherPoller() {
   useEffect(() => {
     const poll = async () => {
       try {
-        const r = await fetch('/api/weather')
+        const r = await fetch(`${API_BASE}/api/weather`)
         if (r.ok) useJunctionStore.getState().setWeather(await r.json())
       } catch (_) {}
     }

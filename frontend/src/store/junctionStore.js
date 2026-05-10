@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+const API_BASE = import.meta.env.VITE_API_URL || ''
 
 const LANES = ['NORTH', 'EAST', 'SOUTH', 'WEST']
 
@@ -239,13 +240,13 @@ export const useJunctionStore = create((set, get) => ({
     set({ lanes: newLanes })
 
     try {
-      await fetch(`/api/sim/scenario?scenario=${encodeURIComponent(scenario)}`, { method: 'POST' })
+      await fetch(`${API_BASE}/api/sim/scenario?scenario=${encodeURIComponent(scenario)}`, { method: 'POST' })
     } catch (_) {}
   },
   setSpeed: async (mult) => {
     set({ speedMultiplier: mult })
     try {
-      await fetch(`/api/sim/speed?multiplier=${mult}`, { method: 'POST' })
+      await fetch(`${API_BASE}/api/sim/speed?multiplier=${mult}`, { method: 'POST' })
     } catch (_) {}
   },
   triggerEmergency: async (lane = 'NORTH') => {
@@ -274,7 +275,7 @@ export const useJunctionStore = create((set, get) => ({
     })
 
     try {
-      await fetch(`/api/sim/emergency?lane=${lane}`, { method: 'POST' })
+      await fetch(`${API_BASE}/api/sim/emergency?lane=${lane}`, { method: 'POST' })
     } catch (_) {}
   },
   clearEmergency: async () => {
@@ -301,7 +302,7 @@ export const useJunctionStore = create((set, get) => ({
     })
 
     try {
-      await fetch('/api/sim/clear_emergency', { method: 'POST' })
+      await fetch(`${API_BASE}/api/sim/clear_emergency`, { method: 'POST' })
     } catch (_) {}
   },
 
@@ -353,7 +354,7 @@ export const useJunctionStore = create((set, get) => ({
     setSignals({ ...signals, active_phase: lane, phases: newPhases })
 
     try {
-      await fetch(`/api/signals/override?lane=${lane}`, { method: 'POST' })
+      await fetch(`${API_BASE}/api/signals/override?lane=${lane}`, { method: 'POST' })
     } catch (_) {}
   },
 }))
