@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-const API_BASE = import.meta.env.VITE_API_URL || ''
+export const API_BASE = import.meta.env.VITE_API_URL || 'https://nexus-junction-backend.onrender.com'
 
 const LANES = ['NORTH', 'EAST', 'SOUTH', 'WEST']
 

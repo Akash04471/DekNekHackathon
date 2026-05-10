@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useJunctionStore } from '../../store/junctionStore'
+import { useJunctionStore, API_BASE } from '../../store/junctionStore'
 
 function Typewriter({ text, speed = 15 }) {
   const [charIndex, setCharIndex] = useState(0)
@@ -82,7 +82,7 @@ export default function ChatAssistant() {
     setLoading(true)
 
     try {
-      const r = await fetch(`/api/chat?message=${encodeURIComponent(msg)}`)
+      const r = await fetch(`${API_BASE}/api/chat?message=${encodeURIComponent(msg)}`)
       const data = await r.json()
       addChatMessage({ role: 'assistant', text: data.reply })
     } catch {
