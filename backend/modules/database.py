@@ -13,8 +13,18 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 
-DATABASE_URL = "sqlite:///./nexus.db"
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+import os
+
+# Use absolute path for SQLite to avoid issues on Render
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "..", "nexus.db")
+DATABASE_URL = f"sqlite:///{DB_PATH}"
+
+engine = create_engine(
+    DATABASE_URL, 
+    connect_args={"check_same_thread": False},
+    pool_pre_ping=True  # Ensures connections are alive
+)
 
 # Enable WAL mode for concurrent reads
 @sa_event.listens_for(engine, "connect")
