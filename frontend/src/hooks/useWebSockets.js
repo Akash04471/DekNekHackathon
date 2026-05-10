@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useJunctionStore } from '../store/junctionStore'
 
-const WS_BASE = 'ws://localhost:8000'
+const WS_BASE = 'ws://localhost:8080'
 
 function makeWs(path, channelName, storeAction) {
   let ws

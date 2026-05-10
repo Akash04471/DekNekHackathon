@@ -9,6 +9,7 @@ import PredictionPanel from './components/PredictionPanel'
 import EmergencyBanner from './components/EmergencyBanner'
 import ChatAssistant from './components/ChatAssistant'
 import OptimizerOverlay from './components/OptimizerOverlay'
+import VoiceCommandCenter from './components/VoiceCommand'
 import { useWebSockets, useKpiPoller, useWeatherPoller, useLanePoller, useAudioPoller } from './hooks/useWebSockets'
 import { useJunctionStore } from './store/junctionStore'
 import './index.css'
@@ -102,6 +103,7 @@ export default function App() {
 
       <OptimizerOverlay />
       <ChatAssistant />
+      <VoiceCommandCenter />
     </>
   )
 }

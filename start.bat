@@ -5,7 +5,7 @@ echo ===================================================
 echo.
 
 echo [1/2] Starting Backend (FastAPI)...
-start "NEXUS Backend" cmd /k "cd /d %~dp0backend && python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+start "NEXUS Backend" cmd /k "cd /d %~dp0backend && python -m uvicorn main:app --host 0.0.0.0 --port 8080 --reload"
 
 echo Waiting 3 seconds for backend to initialize...
 timeout /t 3 /nobreak >nul
@@ -16,9 +16,9 @@ start "NEXUS Frontend" cmd /k "cd /d %~dp0frontend && npm run dev"
 echo.
 echo ===================================================
 echo   NEXUS JUNCTION is starting up!
-echo   Backend:  http://localhost:8000
+echo   Backend:  http://localhost:8080
 echo   Frontend: http://localhost:5173
-echo   API Docs: http://localhost:8000/docs
+echo   API Docs: http://localhost:8080/docs
 echo ===================================================
 echo.
 timeout /t 4 /nobreak >nul
