@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { motion } from 'framer-motion'
 import SidebarLeft from './components/SidebarLeft'
 import JunctionView3D from './components/JunctionView3D'
@@ -16,7 +16,6 @@ import './index.css'
 
 function KpiBar() {
   const kpis = useJunctionStore(s => s.kpis)
-  const weather = useJunctionStore(s => s.weather)
 
   return (
     <div className="app-stats">
@@ -32,12 +31,6 @@ function KpiBar() {
           <span className="text-white/50 shrink-0">Accuracy: <span className="text-purple font-bold font-mono">{kpis.prediction_accuracy_pct || 89}%</span></span>
           <span className="text-white/10 shrink-0">|</span>
           <span className="text-white/50 shrink-0">Uptime: <span className="text-green font-bold font-mono">{kpis.uptime_pct || 99.9}%</span></span>
-          {weather && (
-            <>
-              <span className="text-white/10 shrink-0">|</span>
-              <span className="text-white/50 shrink-0">🌤 <span className="font-mono">{weather.temp_c}°C {weather.condition}</span></span>
-            </>
-          )}
         </div>
       </div>
       <div className="flex items-center gap-3 shrink-0">
@@ -48,15 +41,38 @@ function KpiBar() {
   )
 }
 
+function VignetteOverlay() {
+  const mode = useJunctionStore(s => s.signals.mode)
+  const isEmergency = mode === 'EMERGENCY'
+  
+  return (
+    <div 
+      id="vignette-overlay" 
+      className={`${isEmergency ? 'active persist' : ''}`}
+    />
+  )
+}
+
 export default function App() {
+  const updateMetrics = useJunctionStore(s => s.updateMetrics)
+  const updateOptimizerMetrics = useJunctionStore(s => s.updateOptimizerMetrics)
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      updateMetrics()
+      updateOptimizerMetrics()
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [updateMetrics, updateOptimizerMetrics])
+
   useWebSockets()
   useKpiPoller()
-  useWeatherPoller()
   useLanePoller()
   useAudioPoller()
 
   return (
     <>
+      <VignetteOverlay />
       <div className="app-layout">
         <aside className="app-left">
           <SidebarLeft />

@@ -60,6 +60,7 @@ export default function AnalyticsPanel() {
         ))}
       </div>
       
+      
       {/* Bottom status strip */}
       <div className="mt-auto p-3 bg-white/5 border-t border-white/5">
           <div className="flex justify-between items-center">

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useJunctionStore } from '../../store/junctionStore'
 
 export default function OptimizerOverlay() {
-  const { recommendations, removeRecommendation, updateOptimizerMetrics } = useJunctionStore()
+  const { recommendations, removeRecommendation, applyRecommendation, updateOptimizerMetrics } = useJunctionStore()
 
   useEffect(() => {
     const timer = setInterval(updateOptimizerMetrics, 2000)
@@ -34,7 +34,10 @@ export default function OptimizerOverlay() {
               <h4 className="text-[11px] font-bold text-white mb-1">{rec.title}</h4>
               <p className="text-[10px] text-muted leading-relaxed">{rec.desc}</p>
               <div className="mt-3 flex gap-2">
-                <button className="text-[8px] font-heading font-bold tracking-wider bg-cyan/8 text-cyan px-3 py-1.5 rounded-lg border border-cyan/15 hover:bg-cyan/15 transition-all">
+                <button 
+                  onClick={() => applyRecommendation(rec.id)}
+                  className="text-[8px] font-heading font-bold tracking-wider bg-cyan/8 text-cyan px-3 py-1.5 rounded-lg border border-cyan/15 hover:bg-cyan/15 transition-all"
+                >
                   APPLY
                 </button>
                 <button

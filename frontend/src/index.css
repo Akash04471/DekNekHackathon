@@ -9,9 +9,10 @@
   --bg-card:    rgba(8, 14, 30, 0.6);
   --bg-panel:   rgba(6, 10, 24, 0.92);
 
-  --glass-bg:      rgba(10, 16, 32, 0.55);
-  --glass-border:  rgba(255, 255, 255, 0.06);
-  --glass-bright:  rgba(20, 30, 60, 0.4);
+  --glass-bg:      rgba(8, 14, 30, 0.65);
+  --glass-border:  rgba(255, 255, 255, 0.08);
+  --glass-bright:  rgba(15, 25, 55, 0.5);
+  --glass-glow:    0 0 20px rgba(0, 212, 224, 0.1);
 
   --cyan:    #00d4e0;
   --cyan-bright: #00F5FF;
@@ -30,16 +31,38 @@
   --font-mono:    'JetBrains Mono', monospace;
 }
 
-/* ─── Subtle Film Grain (barely visible, adds realism) ────────────── */
+/* ─── Subtle Film Grain & Scanlines ────────────── */
 body::after {
   content: "";
   position: fixed;
   inset: 0;
   z-index: 9998;
   pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  opacity: 0.018;
+  background-image: 
+    linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%),
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 100% 2px, 200px 200px;
+  opacity: 0.025;
   mix-blend-mode: overlay;
+}
+
+/* Vertical Scanning Line */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100px;
+  background: linear-gradient(to bottom, transparent, rgba(0, 212, 224, 0.02), transparent);
+  z-index: 9999;
+  pointer-events: none;
+  animation: scanning 8s linear infinite;
+}
+
+@keyframes scanning {
+  0% { transform: translateY(-100px); }
+  100% { transform: translateY(100vh); }
 }
 
 /* ─── Reset & Base ────────────────────────────────────────────────── */
@@ -66,13 +89,16 @@ h1, h2, h3, h4, .font-heading {
 /* ─── Glass (Refined — no excessive blur or glow) ─────────────────── */
 .glass {
   background: var(--glass-bg);
-  backdrop-filter: blur(16px) saturate(1.2);
+  backdrop-filter: blur(24px) saturate(1.5);
   border: 1px solid var(--glass-border);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
 }
 
 .glass-bright {
   background: var(--glass-bright);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px) saturate(1.8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: var(--glass-glow);
 }
 
 /* ─── Layout ──────────────────────────────────────────────────────── */
@@ -100,7 +126,7 @@ h1, h2, h3, h4, .font-heading {
   display: flex;
   flex-direction: column;
   gap: 0;
-  z-index: 50;
+  z-index: 100;
   overflow-y: auto;
 }
 
@@ -155,14 +181,18 @@ h1, h2, h3, h4, .font-heading {
 
 /* ─── Stat Cards ──────────────────────────────────────────────────── */
 .stat-card {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  border-radius: 14px;
-  padding: 14px 16px;
-  transition: border-color 0.3s ease;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  padding: 16px 18px;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
 }
 .stat-card:hover {
-  border-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(0, 212, 224, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px -10px rgba(0, 212, 224, 0.15);
 }
 
 /* ─── Lane Cards ──────────────────────────────────────────────────── */
@@ -283,3 +313,83 @@ h1, h2, h3, h4, .font-heading {
 .bg-green { background-color: var(--green); }
 .bg-red { background-color: var(--red); }
 .border-cyan { border-color: var(--cyan); }
+
+/* Emergency Vignette Overlay */
+#vignette-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 9999;
+  background: radial-gradient(ellipse at center, transparent 60%, rgba(255, 0, 0, 0.25) 100%);
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+#vignette-overlay.active {
+  animation: emergency-pulse 1.5s ease-in-out forwards;
+}
+
+#vignette-overlay.persist {
+  opacity: 0.15;
+}
+
+@keyframes emergency-pulse {
+  0% { opacity: 0; }
+  25% { opacity: 0.8; }
+  50% { opacity: 0; }
+  75% { opacity: 0.5; }
+  100% { opacity: 0.15; }
+}
+
+/* Cinematic Mode Bars */
+.cinematic-bars-top, .cinematic-bars-bottom {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 0;
+  background: black;
+  z-index: 100;
+  transition: height 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.cinematic-bars-top { top: 0; }
+.cinematic-bars-bottom { bottom: 0; }
+.cinematic-active .cinematic-bars-top, 
+.cinematic-active .cinematic-bars-bottom {
+  height: 80px;
+}
+
+/* MiniMap Overlay */
+.minimap-container {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  width: 120px;
+  height: 120px;
+  background: rgba(5, 8, 16, 0.8);
+  border: 1px solid rgba(0, 245, 255, 0.2);
+  border-radius: 12px;
+  overflow: hidden;
+  z-index: 101;
+  backdrop-filter: blur(8px);
+}
+
+/* UI Suppression in Cinematic Mode */
+body:has(.cinematic-active) .app-left,
+body:has(.cinematic-active) .app-right,
+body:has(.cinematic-active) .app-bottom,
+body:has(.cinematic-active) .app-stats,
+body:has(.cinematic-active) .header-container {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(20px);
+  transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+body:has(.cinematic-active) .app-center {
+  grid-column: 1 / span 3;
+  grid-row: 1 / span 2;
+  border: none;
+}

@@ -25,7 +25,7 @@ export default function PredictionPanel() {
     switch (activeTab) {
       case 'LIVE':
         return (
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
             <LineChart data={liveData}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
               <XAxis dataKey="t" tick={{ fill: '#475569', fontSize: 9 }} />
@@ -54,7 +54,7 @@ export default function PredictionPanel() {
               upper: 40 + Math.sin(i / 2) * 25,
             }))
         return (
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
             <AreaChart data={data}>
               <defs>
                 <linearGradient id="p-grad" x1="0" y1="0" x2="0" y2="1">
@@ -80,7 +80,7 @@ export default function PredictionPanel() {
           { name: 'Throughput', fixed: 420, nexus: 663 },
         ]
         return (
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
             <BarChart data={compData} barGap={4}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
               <XAxis dataKey="name" tick={{ fill: '#475569', fontSize: 9 }} />
@@ -148,7 +148,7 @@ export default function PredictionPanel() {
         </div>
       </div>
 
-      <div className="flex-1 p-4" style={{ minWidth: 0, minHeight: 0 }}>
+      <div className="flex-1 p-4 min-h-[120px] relative overflow-hidden">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -156,7 +156,7 @@ export default function PredictionPanel() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="h-full w-full"
+            className="absolute inset-4"
           >
             {renderContent()}
           </motion.div>
