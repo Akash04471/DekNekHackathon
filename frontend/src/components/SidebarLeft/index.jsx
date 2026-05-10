@@ -154,10 +154,16 @@ export default function SidebarLeft() {
             return (
               <button
                 key={l}
-                onClick={() => triggerEmergency(l)}
+                onClick={() => {
+                  if (signals.mode === 'MANUAL') {
+                    useJunctionStore.getState().forceGreenLane(l)
+                  } else {
+                    triggerEmergency(l)
+                  }
+                }}
                 className={`h-10 rounded-xl border text-[10px] font-heading font-black transition-all ${
-                  isActive 
-                  ? 'border-red bg-red/20 text-red shadow-[0_0_15px_rgba(255,0,0,0.3)]'
+                  (signals.mode === 'EMERGENCY' && signals.emergency_lane === l) || (signals.mode === 'MANUAL' && signals.active_phase === l)
+                  ? 'border-cyan bg-cyan/20 text-cyan shadow-[0_0_15px_rgba(0,212,224,0.3)]'
                   : 'border-white/5 text-muted hover:border-cyan/30 hover:text-cyan'
                 }`}
               >

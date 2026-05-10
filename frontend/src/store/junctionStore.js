@@ -129,6 +129,8 @@ export const useJunctionStore = create((set, get) => ({
         vehicles_processed_today: s.kpis.vehicles_processed_today + (totalVehicles > 0 ? (speedMultiplier * 0.1) : 0),
         signal_response_latency_ms: 25 + Math.random() * 15,
         avg_wait_reduction_pct: 15 + Math.random() * 10,
+        prediction_accuracy_pct: 85 + Math.random() * 10,
+        uptime_seconds: s.kpis.uptime_seconds + speedMultiplier,
       },
       signals: {
         ...s.signals,
@@ -199,6 +201,43 @@ export const useJunctionStore = create((set, get) => ({
   speedMultiplier: 1,
   setScenario: async (scenario) => {
     set({ scenario })
+    
+    // Immediate Local Simulation for Demo Impact
+    const { lanes } = get()
+    const newLanes = { ...lanes }
+    
+    Object.keys(newLanes).forEach(lane => {
+      let count = 5
+      let density = 20
+      
+      if (scenario === 'Morning Rush') {
+        count = (lane === 'NORTH' || lane === 'SOUTH') ? 28 : 12
+        density = (lane === 'NORTH' || lane === 'SOUTH') ? 85 : 40
+      } else if (scenario === 'Severe Congestion') {
+        count = 35 + Math.floor(Math.random() * 5)
+        density = 95
+      } else if (scenario === 'Late Night') {
+        count = Math.floor(Math.random() * 3)
+        density = 5
+      } else if (scenario === 'Emergency') {
+        count = 8
+        density = 30
+        if (lane === 'NORTH') newLanes[lane].has_emergency = true
+      } else {
+        count = 10 + Math.floor(Math.random() * 8)
+        density = 45
+      }
+      
+      newLanes[lane] = {
+        ...newLanes[lane],
+        vehicle_count: count,
+        density_score: density,
+        has_emergency: scenario === 'Emergency' && lane === 'NORTH'
+      }
+    })
+    
+    set({ lanes: newLanes })
+
     try {
       await fetch(`/api/sim/scenario?scenario=${encodeURIComponent(scenario)}`, { method: 'POST' })
     } catch (_) {}
@@ -210,11 +249,57 @@ export const useJunctionStore = create((set, get) => ({
     } catch (_) {}
   },
   triggerEmergency: async (lane = 'NORTH') => {
+    // Immediate Local Simulation
+    const { lanes, addChatMessage, audio } = get()
+    const newLanes = { ...lanes }
+    if (newLanes[lane]) {
+      newLanes[lane].has_emergency = true
+      newLanes[lane].vehicle_count = Math.max(newLanes[lane].vehicle_count, 1)
+    }
+    set({ 
+      signals: { ...get().signals, mode: 'EMERGENCY', emergency_lane: lane, emergency_eta: 15 },
+      lanes: newLanes,
+      audio: { 
+        ...audio, 
+        siren_detected: true, 
+        confidence: 0.94, 
+        db_level: 88,
+        estimated_distance_m: 350,
+        estimated_eta_seconds: 15
+      }
+    })
+    addChatMessage({
+      role: 'assistant',
+      text: `🚨 EMERGENCY PROTOCOL ACTIVATED: Acoustic sensors detected a high-decibel siren on ${lane} corridor. Overriding all signals to clear the Green Wave. ETA 15 seconds.`
+    })
+
     try {
       await fetch(`/api/sim/emergency?lane=${lane}`, { method: 'POST' })
     } catch (_) {}
   },
   clearEmergency: async () => {
+    // Immediate Local Simulation
+    const { lanes, signals, addChatMessage, audio } = get()
+    const newLanes = { ...lanes }
+    Object.keys(newLanes).forEach(l => newLanes[l].has_emergency = false)
+    
+    set({ 
+      signals: { ...signals, mode: 'ADAPTIVE', emergency_lane: null, emergency_eta: null },
+      lanes: newLanes,
+      audio: { 
+        ...audio, 
+        siren_detected: false, 
+        confidence: 0, 
+        db_level: 38,
+        estimated_distance_m: 500,
+        estimated_eta_seconds: 999
+      }
+    })
+    addChatMessage({
+      role: 'assistant',
+      text: `✅ ALL CLEAR: Emergency corridor resolved. System has returned to Autonomous Adaptive Mode. Signal efficiency is stabilizing.`
+    })
+
     try {
       await fetch('/api/sim/clear_emergency', { method: 'POST' })
     } catch (_) {}

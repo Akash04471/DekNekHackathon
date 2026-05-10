@@ -1,6 +1,7 @@
 import React from 'react'
 import { motion } from 'framer-motion'
 import { useJunctionStore } from '../../store/junctionStore'
+import CO2Odometer from '../CO2Odometer'
 
 function KpiCard({ label, value, unit, color = '#00F5FF', icon, idx }) {
   return (
@@ -54,6 +55,10 @@ export default function AnalyticsPanel() {
         </div>
         <span className="text-[8px] font-black text-amber/60 tracking-widest uppercase">{simState?.scenario}</span>
       </div>
+      <div className="px-3 mb-2">
+        <CO2Odometer co2Saved={kpis.vehicles_processed_today * 0.042} />
+      </div>
+      
       <div className="p-3 flex flex-col gap-2 overflow-y-auto">
         {KPI_DATA.map((kpi, i) => (
           <KpiCard key={kpi.label} {...kpi} idx={i} />

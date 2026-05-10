@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, LineChart, Line, CartesianGrid } from 'recharts'
 import { useJunctionStore } from '../../store/junctionStore'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -10,30 +10,40 @@ export default function PredictionPanel() {
   const predictions = useJunctionStore(s => s.predictions)
   const lanes = useJunctionStore(s => s.lanes)
 
-  // Generate synthetic live data for LIVE tab
-  const liveData = useMemo(() => {
-    return Array.from({ length: 20 }, (_, i) => ({
-      t: `${i}m`,
-      NORTH: Math.round(20 + Math.random() * 40),
-      EAST: Math.round(15 + Math.random() * 35),
-      SOUTH: Math.round(25 + Math.random() * 30),
-      WEST: Math.round(10 + Math.random() * 50),
-    }))
-  }, [])
+  // Real-time rolling buffer for LIVE telemetry
+  const [liveBuffer, setLiveBuffer] = useState([])
+  
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setLiveBuffer(prev => {
+        const newPoint = {
+          t: new Date().toLocaleTimeString([], { hour12: false, minute: '2-digit', second: '2-digit' }),
+          NORTH: lanes.NORTH?.vehicle_count || 0,
+          EAST: lanes.EAST?.vehicle_count || 0,
+          SOUTH: lanes.SOUTH?.vehicle_count || 0,
+          WEST: lanes.WEST?.vehicle_count || 0,
+        }
+        const updated = [...prev, newPoint].slice(-24)
+        return updated
+      })
+    }, 2000)
+    return () => clearInterval(interval)
+  }, [lanes])
 
   const renderContent = () => {
     switch (activeTab) {
       case 'LIVE':
         return (
           <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-            <LineChart data={liveData}>
+            <LineChart data={liveBuffer}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
-              <XAxis dataKey="t" tick={{ fill: '#475569', fontSize: 9 }} />
-              <YAxis domain={[0, 100]} tick={{ fill: '#475569', fontSize: 9 }} width={30} />
-              <Line type="monotone" dataKey="NORTH" stroke="#00d4e0" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="EAST" stroke="#34d399" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="SOUTH" stroke="#fbbf24" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="WEST" stroke="#a78bfa" strokeWidth={2} dot={false} />
+              <XAxis dataKey="t" tick={{ fill: '#475569', fontSize: 7 }} />
+              <YAxis domain={[0, 'auto']} tick={{ fill: '#475569', fontSize: 9 }} width={25} />
+              <Tooltip contentStyle={{ background: '#0a0f1e', border: 'none', borderRadius: 4, fontSize: 10 }} />
+              <Line type="monotone" dataKey="NORTH" stroke="#00d4e0" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+              <Line type="monotone" dataKey="EAST" stroke="#34d399" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+              <Line type="monotone" dataKey="SOUTH" stroke="#fbbf24" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+              <Line type="monotone" dataKey="WEST" stroke="#a78bfa" strokeWidth={1.5} dot={false} isAnimationActive={false} />
             </LineChart>
           </ResponsiveContainer>
         )
